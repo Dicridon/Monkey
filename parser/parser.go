@@ -5,6 +5,19 @@ import (
 	"monkey/ast"
 	"monkey/lexer"
 	"monkey/token"
+	"strconv"
+)
+
+// precedence of operators
+const (
+	_ int = iota
+	LOWEST
+	EQUALS      // ==
+	LESSGREATER // < or >
+	SUM         // +
+	PRODUCT     // *
+	PREFIX      // -X or !X
+	CALL        // someFunction()
 )
 
 // Parser wraps up Lexer as token stream
@@ -14,6 +27,9 @@ type Parser struct {
 	peekToken token.Token
 
 	errors []string
+
+	prefixParseFns map[token.TokenType]prefixParseFn
+	infixParseFns  map[token.TokenType]infixParseFn
 }
 
 // New return a pointer of Parser
@@ -24,9 +40,52 @@ func New(l *lexer.Lexer) *Parser {
 	}
 	p.nextToken()
 	p.nextToken()
-
+	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
+	p.registerPrefix(token.IDENT, p.parseIdentifer)
+	p.registerPrefix(token.INT, p.parseIntegerLiteral)
+	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(token.BANG, p.parsePrefixExpression)
 	return p
 }
+
+// Parsing functions that return expressions (used in Pratt Parser)
+func (p *Parser) parseIdentifer() ast.Expression {
+	return &ast.Identifier{
+		Token: p.curToken,
+		Value: p.curToken.Literal,
+	}
+}
+
+func (p *Parser) parseIntegerLiteral() ast.Expression {
+	lit := &ast.IntegerLiteral{
+		Token: p.curToken,
+	}
+
+	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
+	if err != nil {
+		msg := fmt.Sprintf("could not parse %q as integer", p.curToken.Literal)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+
+	lit.Value = value
+	return lit
+}
+
+func (p *Parser) parsePrefixExpression() ast.Expression {
+	expression := &ast.PrefixExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,
+	}
+
+	p.nextToken()
+	expression.Right = p.parseExpression(PREFIX)
+	return expression
+}
+
+/////////////////////////////////////////////////////////////////
+// ERROR HANDLING
+/////////////////////////////////////////////////////////////////
 
 // Errors return errors in a parser
 func (p *Parser) Errors() []string {
@@ -38,7 +97,13 @@ func (p *Parser) nextToken() {
 	p.peekToken = p.l.NextToken()
 }
 
+///////////////////////////////////////////////////////////////
+// PROGRAM PARSER
+///////////////////////////////////////////////////////////////
+
 // ParseProgram will generate program -- Statements
+// statements include various statements and expressions
+// but notice expressions are treated as statements
 func (p *Parser) ParseProgram() *ast.Program {
 	program := &ast.Program{}
 	program.Statements = []ast.Statement{}
@@ -61,7 +126,7 @@ func (p *Parser) parseStatement() ast.Statement {
 	case token.RETURN:
 		return p.parseReturnStatement()
 	default:
-		return nil
+		return p.parseExpressionStatement()
 	}
 }
 
@@ -102,6 +167,53 @@ func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 	return stmt
 }
 
+func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
+	stmt := &ast.ExpressionStatement{
+		Token: p.curToken,
+	}
+	stmt.Expr = p.parseExpression(LOWEST)
+
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+	return stmt
+}
+
+func (p *Parser) noPrefixParserFnError(t token.TokenType) {
+	msg := fmt.Sprintf("no prefix parse function for %s found", t)
+	p.errors = append(p.errors, msg)
+}
+
+func (p *Parser) parseExpression(precedence int) ast.Expression {
+	prefix := p.prefixParseFns[p.curToken.Type]
+
+	if prefix == nil {
+		p.noPrefixParserFnError(p.curToken.Type)
+		return nil
+	}
+
+	leftExp := prefix()
+
+	return leftExp
+}
+
+///////////////////////////////////////////////////////////
+// HELPER FUNCTIONS AND TYPES
+// code below designs Pratt parser
+type (
+	prefixParseFn func() ast.Expression
+	infixParseFn  func(ast.Expression) ast.Expression
+)
+
+func (p *Parser) registerPrefix(tokenType token.TokenType, fn prefixParseFn) {
+	p.prefixParseFns[tokenType] = fn
+}
+
+func (p *Parser) registerInfix(tokenType token.TokenType, fn infixParseFn) {
+	p.infixParseFns[tokenType] = fn
+}
+
+// helper functions
 func (p *Parser) curTokenIs(t token.TokenType) bool {
 	return p.curToken.Type == t
 }
