@@ -2,6 +2,7 @@ package lexer
 
 import "monkey/token"
 
+// Lexer struct producing token stream
 type Lexer struct {
 	input        string
 	position     int
@@ -9,6 +10,7 @@ type Lexer struct {
 	ch           byte
 }
 
+// New constructs new Lexer
 func New(input string) *Lexer {
 	l := &Lexer{input: input}
 	l.readChar()
@@ -22,9 +24,10 @@ func (l *Lexer) readChar() {
 		l.ch = l.input[l.readPosition]
 	}
 	l.position = l.readPosition
-	l.readPosition += 1
+	l.readPosition++
 }
 
+// NextToken returns a token from input string
 func (l *Lexer) NextToken() token.Token {
 	var tok token.Token
 
@@ -34,7 +37,7 @@ func (l *Lexer) NextToken() token.Token {
 		if l.peekChar() == '=' {
 			l.readChar()
 			tok = token.Token{
-				Type: token.EQ,
+				Type:    token.EQ,
 				Literal: "==",
 			}
 		} else {
@@ -47,8 +50,8 @@ func (l *Lexer) NextToken() token.Token {
 	case '!':
 		if l.peekChar() == '=' {
 			l.readChar()
-			tok = token.Token {
-				Type: token.NEQ,
+			tok = token.Token{
+				Type:    token.NEQ,
 				Literal: "!=",
 			}
 		} else {
@@ -135,7 +138,6 @@ func (l *Lexer) readNumber() string {
 func (l *Lexer) peekChar() byte {
 	if l.readPosition >= len(l.input) {
 		return 0
-	} else {
-		return l.input[l.readPosition]
 	}
+	return l.input[l.readPosition]
 }
