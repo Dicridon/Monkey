@@ -9,9 +9,9 @@ import (
 
 func TestLetStatements(t *testing.T) {
 	input := `
-	let x = 5;
-	let = 10;
-	let 838383;
+	return 5;
+	return 10;
+	return 993322;
 	`
 	l := lexer.New(input)
 	p := New(l)
@@ -28,19 +28,19 @@ func TestLetStatements(t *testing.T) {
 	} else {
 		fmt.Printf("Normal")
 	}
-	tests := []struct {
-		expectedIdentifier string
-	}{
-		{"x"},
-		{"y"},
-		{"foobar"},
-	}
-	fmt.Println(program.Statements)
-	for i, tt := range tests {
-		stmt := program.Statements[i]
-		if !testLetStatements(t, stmt, tt.expectedIdentifier) {
-			return
+
+	for _, stmt := range program.Statements {
+		returnStmt, ok := stmt.(*ast.ReturnStatement)
+		if !ok {
+			t.Errorf("stmt not *ast.returnStatment. got=%T", stmt)
+			continue
 		}
+
+		if returnStmt.TokenLiteral() != "return" {
+			t.Errorf("returnStmt.TokenLiteral not 'return', got %q",
+				returnStmt.TokenLiteral())
+		}
+
 	}
 }
 
